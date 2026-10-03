@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PillPal</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>PillPal</h1>
+      <p class="tagline">Scan your prescription bottle. Understand it in your language. Never miss a dose.</p>
+    </header>
+
+    <section class="card" id="scan-card">
+      <label class="field">
+        <span>Your language</span>
+        <select id="language"></select>
+      </label>
+
+      <label class="photo-drop" for="photo">
+        <img id="preview" alt="" hidden>
+        <span id="photo-hint">📷 Tap to take a photo of the label</span>
+      </label>
+      <input type="file" id="photo" accept="image/*" capture="environment" hidden>
+
+      <button id="scan-btn" class="primary" disabled>Scan label</button>
+      <p id="status" class="status" role="status"></p>
+    </section>
+
+    <section class="card" id="result-card" hidden>
+      <div id="low-confidence" class="banner warn" hidden>
+        Some parts of the label were hard to read. Double-check everything below against the bottle, or retake the photo with less glare.
+      </div>
+
+      <h2 id="med-name"></h2>
+      <p id="med-strength" class="muted"></p>
+
+      <div id="translated" class="translated">
+        <p id="t-summary" class="summary"></p>
+        <h3>💊</h3>
+        <p id="t-how"></p>
+        <h3>🕒</h3>
+        <p id="t-when"></p>
+        <div id="t-warnings-wrap">
+          <h3>⚠️</h3>
+          <ul id="t-warnings" class="warnings"></ul>
+        </div>
+        <p id="t-disclaimer" class="disclaimer"></p>
+      </div>
+      <button id="speak-btn" class="secondary">🔊 Read aloud</button>
+
+      <details>
+        <summary>Original label text</summary>
+        <p id="orig-directions" class="verbatim"></p>
+        <dl id="orig-details"></dl>
+      </details>
+    </section>
+
+    <section class="card" id="reminder-card" hidden>
+      <h2>Reminders</h2>
+      <p class="muted" id="prn-note" hidden>This medicine is taken only as needed, so no daily reminder is suggested. You can still add times below.</p>
+      <label class="field">
+        <span>Start date</span>
+        <input type="date" id="start-date">
+      </label>
+      <label class="field">
+        <span>Repeat</span>
+        <select id="repeat">
+          <option value="daily">Every day</option>
+          <option value="weekly">Every week</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>For how many days? (0 = ongoing)</span>
+        <input type="number" id="duration" min="0" max="365" value="0">
+      </label>
+      <div class="field">
+        <span>Dose times</span>
+        <ul id="times" class="times"></ul>
+        <button id="add-time" class="link">+ Add a time</button>
+      </div>
+      <button id="ics-btn" class="primary">📅 Add to my calendar</button>
+      <p class="muted small">Downloads a calendar file that works with Google Calendar, Apple Calendar and Outlook. Each dose has an alert.</p>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
