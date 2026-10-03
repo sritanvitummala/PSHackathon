@@ -151,3 +151,23 @@ pre { white-space: pre-wrap; background: var(--bg); padding: 10px; border-radius
 
 .facts { grid-template-columns: max-content 1fr; gap: 8px 16px; margin: 12px 0; font-size: 1.1rem; }
 .facts dt { font-weight: 600; color: var(--accent); }
+
+.crop-hint { margin: 0 0 8px; font-size: 0.95rem; }
+.crop-wrap { position: relative; width: fit-content; max-width: 100%; margin: 0 auto 14px; }
+.crop-wrap img {
+  display: block;
+  max-width: 100%;
+  max-height: 420px;
+  border-radius: 10px;
+  touch-action: none; /* dragging draws the crop box instead of scrolling */
+  user-select: none;
+  cursor: crosshair;
+}
+#crop-box {
+  position: absolute;
+  border: 3px solid var(--accent);
+  border-radius: 4px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45); /* dim everything outside the box */
+  pointer-events: none;
+}
+.crop-wrap { overflow: hidden; border-radius: 10px; }

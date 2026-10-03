@@ -33,10 +33,11 @@ $("photo").addEventListener("change", async (e) => {
   if (!file) return;
   setStatus("");
   photoCanvas = await loadToCanvas(file);
+  e.target.value = ""; // allow picking the same file again
   showPreview();
-  $("scan-btn").disabled = false;
-  $("rotate-btn").disabled = false;
 });
+
+$("retake-btn").addEventListener("click", () => $("photo").click());
 
 $("rotate-btn").addEventListener("click", () => {
   photoCanvas = rotateCanvas(photoCanvas);
@@ -44,23 +45,74 @@ $("rotate-btn").addEventListener("click", () => {
 });
 
 function showPreview() {
-  $("preview").src = photoCanvas.toDataURL("image/jpeg", 0.8);
-  $("preview").hidden = false;
-  $("photo-hint").hidden = true;
+  $("preview").src = photoCanvas.toDataURL("image/jpeg", 0.85);
+  $("photo-drop").hidden = true;
+  $("photo-wrap").hidden = false;
+  setCrop(null);
 }
+
+// ---------- Crop box: drag on the photo to select the label ----------
+
+let crop = null; // {x, y, w, h} as 0-1 fractions of the image
+let dragStart = null;
+
+function pointerFraction(e) {
+  const r = $("preview").getBoundingClientRect();
+  return {
+    x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)),
+    y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)),
+  };
+}
+
+function setCrop(c) {
+  crop = c;
+  const box = $("crop-box");
+  box.hidden = !c;
+  if (!c) return;
+  Object.assign(box.style, {
+    left: `${c.x * 100}%`, top: `${c.y * 100}%`, width: `${c.w * 100}%`, height: `${c.h * 100}%`,
+  });
+}
+
+$("preview").addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  $("preview").setPointerCapture(e.pointerId);
+  dragStart = pointerFraction(e);
+  setCrop({ ...dragStart, w: 0, h: 0 });
+});
+
+$("preview").addEventListener("pointermove", (e) => {
+  if (!dragStart) return;
+  const p = pointerFraction(e);
+  setCrop({
+    x: Math.min(dragStart.x, p.x), y: Math.min(dragStart.y, p.y),
+    w: Math.abs(p.x - dragStart.x), h: Math.abs(p.y - dragStart.y),
+  });
+});
+
+$("preview").addEventListener("pointerup", () => {
+  dragStart = null;
+  if (crop && (crop.w < 0.04 || crop.h < 0.04)) setCrop(null); // a tap clears the box
+});
+
+// ---------- Read ----------
 
 $("scan-btn").addEventListener("click", async () => {
   $("scan-btn").disabled = true;
   $("progress").hidden = false;
   try {
-    const { text, confidence } = await readLabel(photoCanvas, (msg, progress) => {
+    const results = await readLabel(photoCanvas, crop, (msg, progress) => {
       setStatus(msg);
       if (progress == null) $("progress").removeAttribute("value");
       else $("progress").value = progress;
     });
-    if (!text.trim()) throw new Error("No text found. Try again closer, with the label facing the camera, or tap ↻ Rotate.");
-    setStatus("");
-    fillForm(parseLabel(text, confidence));
+    const best = pickBestReading(results);
+    if (!best.fullText.trim()) {
+      throw new Error("No text found. Drag a box around the label, get closer, or tap ↻ to rotate.");
+    }
+    const poor = !best.doseQty || best.schedule === "other";
+    setStatus(poor && !crop ? "Tip: drag a box around the label text, then tap Read label again." : "");
+    fillForm(best);
   } catch (err) {
     setStatus(err.message || "Could not read the photo.", true);
   } finally {
@@ -68,6 +120,16 @@ $("scan-btn").addEventListener("click", async () => {
     $("progress").hidden = true;
   }
 });
+
+// Each OCR pass reads the label a bit differently; keep the one that yields the
+// most usable dosing info, using OCR confidence as the tie-breaker.
+function pickBestReading(results) {
+  const score = (p) => (p.directions ? 2 : 0) + (p.doseQty ? 2 : 0) + (p.schedule !== "other" ? 2 : 0)
+    + (p.medicationKnown ? 1 : 0) + p.ocrConfidence / 100;
+  return results
+    .map((r) => parseLabel(r.text, r.confidence))
+    .reduce((best, p) => (score(p) > score(best) ? p : best));
+}
 
 $("manual-btn").addEventListener("click", () => {
   fillForm(parseLabel(""));

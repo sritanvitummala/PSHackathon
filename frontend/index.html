@@ -21,15 +21,22 @@
         <select id="language"></select>
       </label>
 
-      <label class="photo-drop" for="photo">
-        <img id="preview" alt="Label photo" hidden>
-        <span id="photo-hint">📷 Tap to take a photo of the label<br><small>Hold the bottle flat-on, in good light, without glare</small></span>
+      <label class="photo-drop" for="photo" id="photo-drop">
+        <span>📷 Tap to take a photo of the label<br><small>Get close, use good light, avoid glare</small></span>
       </label>
       <input type="file" id="photo" accept="image/*" capture="environment" hidden>
 
-      <div class="row">
-        <button id="rotate-btn" class="secondary" disabled>↻ Rotate</button>
-        <button id="scan-btn" class="primary" disabled>Read label</button>
+      <div id="photo-wrap" hidden>
+        <p class="crop-hint">✋ <strong>Drag a box around the label text</strong> for much better results.</p>
+        <div class="crop-wrap">
+          <img id="preview" alt="Label photo" draggable="false">
+          <div id="crop-box" hidden></div>
+        </div>
+        <div class="row">
+          <button id="retake-btn" class="secondary">📷 Retake</button>
+          <button id="rotate-btn" class="secondary" aria-label="Rotate">↻</button>
+          <button id="scan-btn" class="primary">Read label</button>
+        </div>
       </div>
       <progress id="progress" hidden></progress>
       <p id="status" class="status" role="status"></p>

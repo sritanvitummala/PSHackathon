@@ -39,6 +39,7 @@ The first scan downloads the OCR engine (~10 MB, cached afterwards), so it needs
 
 ## Tips for a good scan
 
+- **Drag a box around the label text** after taking the photo. This is the biggest improvement: the app enlarges just that area before reading it.
 - Use bright, even light and tilt the bottle to avoid glare.
 - Fill the frame with the label and keep the text horizontal (use ↻ Rotate if needed).
 - On a round bottle, photograph the directions part of the label head-on.

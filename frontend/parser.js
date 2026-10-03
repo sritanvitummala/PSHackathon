@@ -89,17 +89,26 @@ const DIRECTION_START = /\b(take|apply|inhale|instill|insert|chew|dissolve|place
 const METADATA_LINE = /\b(qty|quantity|refills?|rx\b|rx#|dr\.?\s|prescriber|date|filled|exp|mfg|ndc|discard|pharmacy|phone)\b|\(\d{3}\)/i;
 const STRENGTH = /(\d+(?:[.,]\d+)?)\s*(?:(?:mg|mcg|µg|g|ml|units?|iu)\b|%)(\s*\/\s*\d*(?:\.\d+)?\s*ml)?/i;
 
+// Largest believable single dose per unit. Bigger numbers are usually the
+// bottle quantity ("QTY: 180 TABS"), not a dose.
+const MAX_DOSE = { tablet: 10, capsule: 10, mL: 60, teaspoon: 6, drop: 10, puff: 4, spray: 4, patch: 2 };
+// A line like "180 TABS" is the bottle quantity; directions never continue past it.
+const QUANTITY_LINE = /\b\d{2,}\s*(tabs?|tablets?|caps?|capsules?)\b/i;
+const COUNT_WORDS = ["once", "one", "twice", "two", "three", "four"];
+
 function parseLabel(rawText, ocrConfidence = 100) {
   const text = normalizeOcr(rawText || "");
   const lower = text.toLowerCase();
   const directions = extractDirections(text);
-  return { ...parseDirections(directions || text, lower), ...findMedication(text, directions), directions, fullText: text, ocrConfidence };
+  // If no directions line was found, fall back to everything except metadata lines.
+  const fallback = text.split("\n").filter((l) => !METADATA_LINE.test(l)).join("\n");
+  return { ...parseDirections(directions || fallback, lower), ...findMedication(text, directions), directions, fullText: text, ocrConfidence };
 }
 
 // Parses just the dosing fields. `context` is the full label text, used for
 // warnings and quantity, which usually sit outside the directions line.
 function parseDirections(directions, context = "") {
-  const sig = normalizeOcr(directions).toLowerCase();
+  const sig = fixCountWords(normalizeOcr(directions).toLowerCase());
   const all = `${sig}\n${context.toLowerCase()}`;
   const dose = parseDose(sig);
   const { schedule, asNeeded, whileAwake } = parseSchedule(sig);
@@ -128,6 +137,15 @@ function normalizeOcr(text) {
     .replace(/[ \t]+/g, " ");
 }
 
+// OCR garbles the count before "times" ("TYREE TIME DAILY"); snap near-misses
+// to the right number word. Only one-letter errors are corrected.
+function fixCountWords(sig) {
+  return sig.replace(/\b[a-z]{3,6}(?=\s+times?\b)/g, (word) => {
+    if (COUNT_WORDS.includes(word)) return word;
+    return COUNT_WORDS.find((c) => levenshtein(word, c) === 1) || word;
+  });
+}
+
 function extractDirections(text) {
   const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
   const start = lines.findIndex((l) => DIRECTION_START.test(l));
@@ -135,7 +153,8 @@ function extractDirections(text) {
   const first = lines[start];
   const parts = [first.slice(first.search(DIRECTION_START))];
   for (let i = start + 1; i < lines.length && parts.length < 4; i++) {
-    if (METADATA_LINE.test(lines[i]) || STRENGTH.test(lines[i])) break; // stop at the drug-name line
+    // Stop at the drug-name line or the quantity line.
+    if (METADATA_LINE.test(lines[i]) || STRENGTH.test(lines[i]) || QUANTITY_LINE.test(lines[i])) break;
     parts.push(lines[i]);
   }
   return parts.join(" ");
@@ -153,12 +172,23 @@ function toNumber(token) {
 function parseDose(sig) {
   let best = null;
   for (const [unit, pattern] of UNITS) {
-    const m = new RegExp(`(?:^|[^\\w])${NUM}\\s*(?:${pattern})\\b`, "i").exec(sig);
-    if (m && (!best || m.index < best.index)) best = { index: m.index, qty: toNumber(m[1].toLowerCase()), unit };
+    for (const m of sig.matchAll(new RegExp(`(?:^|[^\\w.])${NUM}\\s*(?:${pattern})\\b`, "gi"))) {
+      const qty = toNumber(m[1].toLowerCase());
+      if (!isPlausibleDose(qty, unit)) continue;
+      if (!best || m.index < best.index) best = { index: m.index, qty, unit };
+      break;
+    }
   }
   if (best) return { qty: best.qty, unit: best.unit };
   if (/\bapply\b|thin (layer|film)/.test(sig)) return { qty: 1, unit: "application" };
   return { qty: null, unit: "" };
+}
+
+function isPlausibleDose(qty, unit) {
+  if (!(qty > 0) || qty > MAX_DOSE[unit]) return false;
+  // Tablets and capsules come in whole or half units ("1.18 TABS" is an OCR error).
+  if ((unit === "tablet" || unit === "capsule") && !Number.isInteger(qty * 2)) return false;
+  return true;
 }
 
 function parseRoute(sig, unit) {
@@ -183,11 +213,11 @@ function parseSchedule(sig) {
     // For a range like "every 4 to 6 hours", use the longer gap (fewer doses).
     const hours = Number(interval[2] || interval[1] || interval[3]);
     schedule = { 4: "every_4h", 6: "every_6h", 8: "every_8h", 12: "every_12h", 24: "once_daily" }[hours] || "other";
-  } else if (new RegExp(`(four|4)\\s*times\\s*${day}|\\bqid\\b`).test(sig)) {
+  } else if (new RegExp(`(four|4)\\s*times?\\s*${day}|\\bqid\\b`).test(sig)) {
     schedule = "four_daily";
-  } else if (new RegExp(`(three|3)\\s*times\\s*${day}|\\btid\\b`).test(sig)) {
+  } else if (new RegExp(`(three|3)\\s*times?\\s*${day}|\\btid\\b`).test(sig)) {
     schedule = "three_daily";
-  } else if (new RegExp(`(twice|two times|2 times)\\s*${day}|\\bbid\\b`).test(sig)) {
+  } else if (new RegExp(`(twice|two times?|2 times?)\\s*${day}|\\bbid\\b`).test(sig)) {
     schedule = "twice_daily";
   } else if (/once (a|per|every|each) week|\bweekly\b|every week|each week/.test(sig)) {
     schedule = "weekly";
@@ -197,7 +227,12 @@ function parseSchedule(sig) {
     schedule = "morning";
   } else if (/(in the|every|each) evening|at night|\bqpm\b/.test(sig)) {
     schedule = "evening";
-  } else if (new RegExp(`(once|one time|1 time)\\s*${day}|\\bdaily\\b|every day|each day|\\bqd\\b`).test(sig)) {
+  } else if (new RegExp(`(once|one time|1 time)\\s*${day}`).test(sig)) {
+    schedule = "once_daily";
+  } else if (new RegExp(`\\btimes?\\s*${day}`).test(sig)) {
+    // "__ TIMES DAILY" with an unreadable count: don't assume once.
+    schedule = "other";
+  } else if (/\bdaily\b|every day|each day|\bqd\b/.test(sig)) {
     schedule = "once_daily";
   }
 
