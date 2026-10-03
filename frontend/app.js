@@ -364,7 +364,7 @@ function buildIcs(d, t, startDate) {
   for (const time of d.times) {
     lines.push(
       "BEGIN:VEVENT",
-      `UID:${crypto.randomUUID()}@medibridge`,
+      `UID:${uniqueId()}@medibridge`,
       `DTSTAMP:${stamp}`,
       `DTSTART:${date}T${time.replace(":", "")}00`,
       "DURATION:PT15M",
@@ -418,6 +418,12 @@ function el(tag, text) {
   const node = document.createElement(tag);
   node.textContent = text;
   return node;
+}
+
+// crypto.randomUUID only exists on https pages; phones on http://<laptop-ip> lack it.
+function uniqueId() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
 }
 
 function toDateInput(d) {
