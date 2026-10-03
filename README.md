@@ -2,41 +2,52 @@
 
 Take a photo of a prescription bottle and PillPal will:
 
-1. **Read the label** with Claude vision: drug, strength, dose, how often, warnings and pharmacy info.
-2. **Explain it in your language** in plain words, with a read-aloud button. Arabic and Urdu display right-to-left.
-3. **Create reminders** by downloading a `.ics` calendar file with a repeating event and alert for each dose time. It works with Google Calendar, Apple Calendar and Outlook.
+1. **Read the label on your phone.** OCR (text recognition) runs in the browser, so the photo never leaves the device.
+2. **Let you check it.** Every detail it found can be edited before it's used.
+3. **Explain it in your language.** 12 languages, with read-aloud. Arabic displays right-to-left.
+4. **Create reminders.** It downloads a calendar file that works with Google Calendar, Apple Calendar or Outlook, with a repeating event and alert for each dose.
 
-The original label text is always shown next to the translation so it can be checked.
-
-## Structure
-
-```
-backend/   FastAPI app: POST /api/scan → Claude (claude-opus-5-5) → structured JSON
-frontend/  Plain HTML/CSS/JS (no build step), served by the backend at /
-```
-
-## Run it
-
-You need Python 3.10 or newer and an Anthropic API key.
-
-```powershell
-cd backend
-python -m venv .venv
-.venv\Scripts\activate          # macOS/Linux: source .venv/bin/activate
-pip install -r requirements.txt
-copy .env.example .env          # then put your key in .env
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
-```
-
-Open http://localhost:8000.
-
-**Testing on a phone:** connect the phone to the same Wi-Fi as the laptop and open `http://<laptop-ip>:8000`. Find the laptop IP with `ipconfig`. On the phone, the photo button opens the camera directly.
+It's free to run: no API keys, no server costs and no accounts.
 
 ## How it works
 
-- The frontend shrinks the photo to 1600px before uploading it.
-- The backend sends the image to Claude with a JSON schema (structured outputs), so the response always parses. The schema includes a `confidence` field and an `unreadable_fields` list. When confidence is low, the UI shows a warning instead of guessing.
-- Suggested dose times follow standard defaults (for example, twice a day = 08:00 and 20:00). Users can edit or add times before exporting.
-- The `.ics` file is generated in the browser, with one `RRULE` event per dose time and a `VALARM` alert.
+```
+photo → Tesseract.js OCR → pattern parser → user confirms → fixed-phrase translation → .ics reminders
+```
+
+| File | What it does |
+|---|---|
+| `frontend/ocr.js` | Image cleanup (grayscale, contrast) and Tesseract.js OCR in the browser |
+| `frontend/parser.js` | Turns label text into dose, schedule, duration, food and warnings. It fuzzy-matches ~130 common drug names to survive OCR typos |
+| `frontend/i18n.js` | Pre-written translations of standard label phrases (12 languages) |
+| `frontend/app.js` | The UI steps, read-aloud and calendar file generation |
+
+**Why fixed-phrase translations instead of AI translation?** US pharmacy directions use a small set of standard phrases ("TAKE 1 TABLET BY MOUTH TWICE DAILY", "MAY CAUSE DROWSINESS"). Translating those phrases once, and filling in only the numbers, means the app can never invent an instruction. Anything it doesn't recognize is flagged with "ask your pharmacist" instead of being guessed.
+
+## Run it
+
+You need Python, used only as a simple web server.
+
+```powershell
+cd frontend
+python -m http.server 8000
+```
+
+Open http://localhost:8000. To test on a phone, connect it to the same Wi-Fi and open `http://<laptop-ip>:8000` (find the IP with `ipconfig`).
+
+The first scan downloads the OCR engine (~10 MB, cached afterwards), so it needs internet once.
+
+## Tips for a good scan
+
+- Use bright, even light and tilt the bottle to avoid glare.
+- Fill the frame with the label and keep the text horizontal (use ↻ Rotate if needed).
+- On a round bottle, photograph the directions part of the label head-on.
+- If the scan is poor, fix the fields by hand or tap "Type the directions instead".
+
+## Limitations
+
+- Supports English-language US labels.
+- Multi-step directions (for example "2 tablets day 1, then 1 daily") are flagged for the user to check instead of being fully translated.
+- Translations should be reviewed by native speakers before real use.
 
 > ⚠️ This is a hackathon prototype, not medical advice. Always confirm with a pharmacist.

@@ -1,95 +1,78 @@
-// Languages offered in the picker. `tts` is the BCP-47 tag used for read-aloud.
-const LANGUAGES = [
-  { name: "English", tts: "en-US" },
-  { name: "Spanish", tts: "es-ES" },
-  { name: "Chinese (Simplified)", tts: "zh-CN" },
-  { name: "Hindi", tts: "hi-IN" },
-  { name: "Telugu", tts: "te-IN" },
-  { name: "Tamil", tts: "ta-IN" },
-  { name: "Arabic", tts: "ar-SA", rtl: true },
-  { name: "Urdu", tts: "ur-PK", rtl: true },
-  { name: "Vietnamese", tts: "vi-VN" },
-  { name: "Korean", tts: "ko-KR" },
-  { name: "Tagalog", tts: "fil-PH" },
-  { name: "French", tts: "fr-FR" },
-  { name: "Portuguese", tts: "pt-BR" },
-  { name: "Russian", tts: "ru-RU" },
-  { name: "Japanese", tts: "ja-JP" },
-  { name: "German", tts: "de-DE" },
-  { name: "Polish", tts: "pl-PL" },
-  { name: "Haitian Creole", tts: "ht-HT" },
-];
-
 const $ = (id) => document.getElementById(id);
-let photoBlob = null;
-let result = null;
+const EN = I18N.en;
+
+let photoCanvas = null;
+let whileAwake = false; // from the last parse; drops overnight reminder times
+let multiStep = false; // e.g. "2 tablets day 1, then 1 daily" - can't be fully translated
 
 // ---------- Setup ----------
 
-for (const lang of LANGUAGES) {
-  const opt = document.createElement("option");
-  opt.value = lang.name;
-  opt.textContent = lang.name;
-  $("language").append(opt);
-}
-// Pre-select the browser's language when we support it.
+for (const [key, lang] of Object.entries(I18N)) $("language").append(option(key, lang.name));
 const browserLang = navigator.language.slice(0, 2);
-const match = LANGUAGES.find((l) => l.tts.startsWith(browserLang));
-if (match) $("language").value = match.name;
+if (I18N[browserLang]) $("language").value = browserLang;
+
+$("f-unit").append(option("", "—"), ...Object.entries(EN.unit).map(([k, v]) => option(k, v)));
+$("f-route").append(option("", "—"), ...Object.entries(EN.route).map(([k, v]) => option(k, v)));
+$("f-schedule").append(...Object.entries(EN.schedule).map(([k, v]) => option(k, v)));
+$("f-food").append(option("", "—"), ...Object.entries(EN.food).map(([k, v]) => option(k, v)));
+for (const [key, text] of Object.entries(EN.warning)) {
+  const label = document.createElement("label");
+  label.className = "check";
+  const box = Object.assign(document.createElement("input"), { type: "checkbox", value: key });
+  label.append(box, " " + text);
+  $("f-warnings").append(label);
+}
 
 $("start-date").value = toDateInput(new Date());
+warmUpOcr();
 
-// ---------- Photo capture ----------
+// ---------- Step 1: photo + OCR ----------
 
 $("photo").addEventListener("change", async (e) => {
   const file = e.target.files[0];
   if (!file) return;
   setStatus("");
-  photoBlob = await shrinkImage(file);
-  $("preview").src = URL.createObjectURL(photoBlob);
-  $("preview").hidden = false;
-  $("photo-hint").hidden = true;
+  photoCanvas = await loadToCanvas(file);
+  showPreview();
   $("scan-btn").disabled = false;
+  $("rotate-btn").disabled = false;
 });
 
-// Phone photos are often 5-12 MB; resize to keep uploads fast and under the API limit.
-async function shrinkImage(file, maxDim = 1600) {
-  const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.round(bitmap.width * scale);
-  canvas.height = Math.round(bitmap.height * scale);
-  canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.88));
+$("rotate-btn").addEventListener("click", () => {
+  photoCanvas = rotateCanvas(photoCanvas);
+  showPreview();
+});
+
+function showPreview() {
+  $("preview").src = photoCanvas.toDataURL("image/jpeg", 0.8);
+  $("preview").hidden = false;
+  $("photo-hint").hidden = true;
 }
 
-// ---------- Scan ----------
-
 $("scan-btn").addEventListener("click", async () => {
-  if (!photoBlob) return;
   $("scan-btn").disabled = true;
-  setStatus("Reading your label… this takes a few seconds.");
-
-  const form = new FormData();
-  form.append("image", photoBlob, "label.jpg");
-  form.append("language", $("language").value);
-
+  $("progress").hidden = false;
   try {
-    const res = await fetch("/api/scan", { method: "POST", body: form });
-    const body = await res.json();
-    if (!res.ok) throw new Error(body.detail || "Something went wrong.");
-    if (!body.is_prescription_label) {
-      throw new Error("That doesn't look like a prescription label. Try again with the label facing the camera.");
-    }
-    result = { ...body, lang: currentLang() };
+    const { text, confidence } = await readLabel(photoCanvas, (msg, progress) => {
+      setStatus(msg);
+      if (progress == null) $("progress").removeAttribute("value");
+      else $("progress").value = progress;
+    });
+    if (!text.trim()) throw new Error("No text found. Try again closer, with the label facing the camera, or tap ↻ Rotate.");
     setStatus("");
-    renderResult();
-    renderReminders();
+    fillForm(parseLabel(text, confidence));
   } catch (err) {
-    setStatus(err.message, true);
+    setStatus(err.message || "Could not read the photo.", true);
   } finally {
     $("scan-btn").disabled = false;
+    $("progress").hidden = true;
   }
+});
+
+$("manual-btn").addEventListener("click", () => {
+  fillForm(parseLabel(""));
+  $("issues").hidden = true;
+  $("directions").focus();
 });
 
 function setStatus(msg, isError = false) {
@@ -97,127 +80,192 @@ function setStatus(msg, isError = false) {
   $("status").classList.toggle("error", isError);
 }
 
-// ---------- Results ----------
+// ---------- Step 2: confirm details ----------
 
-function renderResult() {
-  const r = result;
-  const t = r.translation;
-  const lang = r.lang;
+function fillForm(p) {
+  $("directions").value = p.directions;
+  $("f-med").value = p.medication;
+  $("f-strength").value = p.strength;
+  fillDosing(p);
+  $("fulltext").textContent = p.fullText;
+  $("fulltext-wrap").hidden = !p.fullText.trim();
+  showIssues(parseIssues(p));
 
-  $("low-confidence").hidden = r.confidence !== "low";
-  $("med-name").textContent = r.medication_name || "Unknown medication";
-  $("med-strength").textContent = [r.strength, r.dose_amount].filter(Boolean).join(" · ");
+  for (const id of ["confirm-card", "result-card", "reminder-card"]) $(id).hidden = false;
+  update();
+  $("confirm-card").scrollIntoView({ behavior: "smooth" });
+}
 
-  $("translated").dir = lang.rtl ? "rtl" : "ltr";
-  $("translated").lang = lang.tts;
-  $("t-summary").textContent = t.summary;
-  $("t-how").textContent = t.how_to_take;
-  $("t-when").textContent = t.when_to_take;
-  $("t-disclaimer").textContent = t.disclaimer;
-  $("t-warnings").replaceChildren(...t.warnings.map((w) => li(w)));
+function fillDosing(p) {
+  $("f-qty").value = p.doseQty ?? "";
+  $("f-unit").value = p.doseUnit;
+  $("f-route").value = p.route;
+  $("f-schedule").value = p.schedule;
+  $("f-prn").checked = p.asNeeded;
+  $("f-food").value = p.food;
+  $("f-days").value = p.durationDays || 0;
+  for (const box of $("f-warnings").querySelectorAll("input")) box.checked = p.warnings.includes(box.value);
+  whileAwake = p.whileAwake;
+  multiStep = p.multiStep;
+  resetTimes();
+}
+
+function showIssues(issues) {
+  $("issues").hidden = issues.length === 0;
+  $("issues").replaceChildren(el("strong", "Please check: "), issues.join(", "));
+}
+
+$("reparse-btn").addEventListener("click", () => {
+  const p = parseDirections($("directions").value, $("fulltext").textContent);
+  fillDosing(p);
+  showIssues(parseIssues({ ...p, ...readForm(), medicationKnown: true, ocrConfidence: 100 }));
+  update();
+});
+
+$("f-schedule").addEventListener("change", resetTimes);
+$("f-prn").addEventListener("change", resetTimes);
+$("confirm-card").addEventListener("input", update);
+$("confirm-card").addEventListener("change", update);
+$("language").addEventListener("change", update);
+
+function readForm() {
+  return {
+    medication: $("f-med").value.trim(),
+    strength: $("f-strength").value.trim(),
+    doseQty: Number($("f-qty").value) || null,
+    doseUnit: $("f-unit").value,
+    route: $("f-route").value,
+    schedule: $("f-schedule").value,
+    asNeeded: $("f-prn").checked,
+    food: $("f-food").value,
+    durationDays: Number($("f-days").value) || 0,
+    warnings: [...$("f-warnings").querySelectorAll("input:checked")].map((b) => b.value),
+    directions: $("directions").value.trim(),
+    times: [...$("times").querySelectorAll("input")].map((i) => i.value).filter(Boolean).sort(),
+  };
+}
+
+// ---------- Step 3: translated instructions ----------
+
+function currentLang() {
+  return I18N[$("language").value] || EN;
+}
+
+// Builds every translated line from the confirmed form, so it can be shown,
+// read aloud, and written into calendar events consistently.
+function translate(d, L) {
+  let when = L.schedule[d.schedule];
+  if (d.asNeeded && d.schedule !== "as_needed") when += ` — ${L.schedule.as_needed}`;
+  if (d.times.length) when += ` (${d.times.join(", ")})`;
+  return {
+    title: [d.medication, d.strength].filter(Boolean).join(" ") || "—",
+    dose: d.doseQty ? `${d.doseQty} × ${L.unit[d.doseUnit] || ""}`.trim() : "",
+    how: [L.route[d.route], L.food[d.food]].filter(Boolean).join(" · "),
+    when,
+    days: d.durationDays ? String(d.durationDays) : "",
+    warnings: d.warnings.map((w) => L.warning[w]),
+    unknown: d.schedule === "other" || !d.doseQty || multiStep ? L.label.unknown : "",
+    disclaimer: L.label.disclaimer,
+  };
+}
+
+function update() {
+  const L = currentLang();
+  const t = translate(readForm(), L);
+
+  $("translated").dir = L.rtl ? "rtl" : "ltr";
+  $("translated").lang = L.tts;
+  $("t-med").textContent = t.title;
+  setFact("dose", L.label.dose, t.dose);
+  setFact("how", L.label.how, t.how);
+  setFact("when", L.label.when, t.when);
+  setFact("days", L.label.duration, t.days);
+  $("t-warnings-label").textContent = `⚠️ ${L.label.warnings}`;
+  $("t-warnings").replaceChildren(...t.warnings.map((w) => el("li", w)));
   $("t-warnings-wrap").hidden = t.warnings.length === 0;
+  $("t-unknown").textContent = t.unknown;
+  $("t-unknown").hidden = !t.unknown;
+  $("t-disclaimer").textContent = t.disclaimer;
+}
 
-  $("orig-directions").textContent = r.label_directions_verbatim || "(not readable)";
-  const details = [
-    ["Patient", r.patient_name], ["Prescriber", r.prescriber], ["Pharmacy", r.pharmacy],
-    ["Pharmacy phone", r.pharmacy_phone], ["Rx #", r.rx_number],
-    ["Quantity", r.quantity], ["Refills", r.refills],
-  ].filter(([, v]) => v);
-  $("orig-details").replaceChildren(
-    ...details.flatMap(([k, v]) => [el("dt", k), el("dd", v)])
-  );
-
-  $("result-card").hidden = false;
-  $("result-card").scrollIntoView({ behavior: "smooth" });
+function setFact(key, label, value) {
+  $(`t-${key}-label`).textContent = label;
+  $(`t-${key}`).textContent = value;
+  $(`t-${key}-label`).hidden = $(`t-${key}`).hidden = !value;
 }
 
 $("speak-btn").addEventListener("click", () => {
-  const t = result.translation;
-  const text = [t.summary, t.how_to_take, t.when_to_take, ...t.warnings, t.disclaimer].join(". ");
+  const L = currentLang();
+  const t = translate(readForm(), L);
+  const text = [t.title, t.dose, t.how, t.when, ...t.warnings, t.unknown, t.disclaimer].filter(Boolean).join(". ");
   speechSynthesis.cancel();
   const utter = new SpeechSynthesisUtterance(text);
-  utter.lang = result.lang.tts;
+  utter.lang = L.tts;
   speechSynthesis.speak(utter);
 });
 
-// ---------- Reminders ----------
+// ---------- Step 4: reminders ----------
 
-function renderReminders() {
-  const r = result;
-  $("prn-note").hidden = r.schedule_type !== "as_needed";
-  $("repeat").value = r.schedule_type === "weekly" ? "weekly" : "daily";
-  $("duration").value = r.duration_days || 0;
+function resetTimes() {
   $("times").replaceChildren();
-  for (const time of r.suggested_times) addTimeRow(time);
-  $("reminder-card").hidden = false;
+  for (const time of defaultTimes($("f-schedule").value, whileAwake, $("f-prn").checked)) addTimeRow(time);
+  update();
 }
 
 function addTimeRow(value = "08:00") {
   const row = document.createElement("li");
-  const input = document.createElement("input");
-  input.type = "time";
-  input.value = value;
+  const input = Object.assign(document.createElement("input"), { type: "time", value });
+  input.addEventListener("input", update);
   const remove = el("button", "✕");
   remove.type = "button";
   remove.setAttribute("aria-label", "Remove time");
-  remove.addEventListener("click", () => row.remove());
+  remove.addEventListener("click", () => { row.remove(); update(); });
   row.append(input, remove);
   $("times").append(row);
 }
 
-$("add-time").addEventListener("click", () => addTimeRow());
+$("add-time").addEventListener("click", () => { addTimeRow(); update(); });
 
 $("ics-btn").addEventListener("click", () => {
-  const times = [...$("times").querySelectorAll("input")].map((i) => i.value).filter(Boolean);
-  if (times.length === 0) {
-    alert("Add at least one dose time first.");
+  const d = readForm();
+  if (d.times.length === 0) {
+    $("ics-status").textContent = "Add at least one dose time first.";
     return;
   }
-  const ics = buildIcs({
-    times,
-    startDate: $("start-date").value,
-    repeat: $("repeat").value,
-    durationDays: Number($("duration").value) || 0,
-  });
-  const name = (result.medication_name || "medication").replace(/[^\w-]+/g, "_");
+  const ics = buildIcs(d, translate(d, currentLang()), $("start-date").value);
+  const name = (d.medication || "medication").replace(/[^\w-]+/g, "_");
   const url = URL.createObjectURL(new Blob([ics], { type: "text/calendar;charset=utf-8" }));
-  const a = Object.assign(document.createElement("a"), { href: url, download: `${name}-reminders.ics` });
-  a.click();
+  Object.assign(document.createElement("a"), { href: url, download: `${name}-reminders.ics` }).click();
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  $("ics-status").textContent = "Calendar file downloaded. Open it to add the reminders.";
 });
 
-// One repeating VEVENT per dose time, each with a pop-up alarm at the dose time.
-function buildIcs({ times, startDate, repeat, durationDays }) {
-  const r = result;
-  const t = r.translation;
+// One repeating VEVENT per dose time, each with an alert at the dose time.
+function buildIcs(d, t, startDate) {
   const stamp = new Date().toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
   const date = startDate.replace(/-/g, "");
-  const description = [
-    t.summary, t.how_to_take, t.when_to_take, ...t.warnings, "",
-    `Label: ${r.label_directions_verbatim}`, t.disclaimer,
-  ].join("\n");
+  const title = `💊 ${[t.title, t.dose].filter((s) => s && s !== "—").join(" — ")}`;
+  const description = [t.dose, t.how, t.when, ...t.warnings, "", `Label: ${d.directions}`, t.disclaimer]
+    .filter((s) => s !== undefined).join("\n");
 
-  let rrule = repeat === "weekly" ? "FREQ=WEEKLY" : "FREQ=DAILY";
-  if (durationDays > 0) {
-    const count = repeat === "weekly" ? Math.ceil(durationDays / 7) : durationDays;
-    rrule += `;COUNT=${count}`;
-  }
+  const weekly = d.schedule === "weekly";
+  let rrule = weekly ? "FREQ=WEEKLY" : "FREQ=DAILY";
+  if (d.durationDays > 0) rrule += `;COUNT=${weekly ? Math.ceil(d.durationDays / 7) : d.durationDays}`;
 
   const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//PillPal//EN", "CALSCALE:GREGORIAN"];
-  for (const time of times) {
-    const hhmm = time.replace(":", "");
+  for (const time of d.times) {
     lines.push(
       "BEGIN:VEVENT",
       `UID:${crypto.randomUUID()}@pillpal`,
       `DTSTAMP:${stamp}`,
-      `DTSTART:${date}T${hhmm}00`,
+      `DTSTART:${date}T${time.replace(":", "")}00`,
       "DURATION:PT15M",
       `RRULE:${rrule}`,
-      `SUMMARY:💊 ${icsEscape(t.reminder_title)}`,
+      `SUMMARY:${icsEscape(title)}`,
       `DESCRIPTION:${icsEscape(description)}`,
       "BEGIN:VALARM",
       "ACTION:DISPLAY",
-      `DESCRIPTION:${icsEscape(t.reminder_title)}`,
+      `DESCRIPTION:${icsEscape(title)}`,
       "TRIGGER:PT0M",
       "END:VALARM",
       "END:VEVENT",
@@ -254,18 +302,14 @@ function foldLine(line) {
 
 // ---------- Helpers ----------
 
-function currentLang() {
-  return LANGUAGES.find((l) => l.name === $("language").value) || LANGUAGES[0];
+function option(value, text) {
+  return Object.assign(document.createElement("option"), { value, textContent: text });
 }
 
 function el(tag, text) {
   const node = document.createElement(tag);
   node.textContent = text;
   return node;
-}
-
-function li(text) {
-  return el("li", text);
 }
 
 function toDateInput(d) {

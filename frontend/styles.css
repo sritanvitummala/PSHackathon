@@ -120,3 +120,34 @@ dd { margin: 0; }
 .times { list-style: none; padding: 0; margin: 0 0 6px; }
 .times li { display: flex; gap: 8px; margin-bottom: 8px; }
 .times button { border: 1px solid var(--border); background: #fff; padding: 0 14px; }
+
+.privacy { margin: -12px 0 20px; font-size: 0.9rem; color: var(--accent); }
+
+textarea, input:not([type]) {
+  width: 100%;
+  font: inherit;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+}
+textarea { resize: vertical; text-transform: uppercase; }
+
+.row { display: flex; gap: 10px; }
+.row .secondary { margin: 0; flex: 0 0 auto; }
+.row .primary { flex: 1; }
+
+progress { width: 100%; margin-top: 12px; accent-color: var(--accent); }
+
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; margin-top: 14px; }
+@media (max-width: 380px) { .grid { grid-template-columns: 1fr; } }
+
+.check { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px; font-weight: 400; }
+.check input { margin-top: 5px; accent-color: var(--accent); }
+.checks { columns: 2 220px; }
+.checks .check { break-inside: avoid; }
+
+pre { white-space: pre-wrap; background: var(--bg); padding: 10px; border-radius: 8px; font-size: 0.85rem; }
+
+.facts { grid-template-columns: max-content 1fr; gap: 8px 16px; margin: 12px 0; font-size: 1.1rem; }
+.facts dt { font-weight: 600; color: var(--accent); }

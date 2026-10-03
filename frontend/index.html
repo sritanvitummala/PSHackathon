@@ -11,70 +11,116 @@
     <header>
       <h1>PillPal</h1>
       <p class="tagline">Scan your prescription bottle. Understand it in your language. Never miss a dose.</p>
+      <p class="privacy">🔒 Your photo is read on this device and never uploaded.</p>
     </header>
 
-    <section class="card" id="scan-card">
+    <!-- Step 1: photo -->
+    <section class="card">
       <label class="field">
         <span>Your language</span>
         <select id="language"></select>
       </label>
 
       <label class="photo-drop" for="photo">
-        <img id="preview" alt="" hidden>
-        <span id="photo-hint">📷 Tap to take a photo of the label</span>
+        <img id="preview" alt="Label photo" hidden>
+        <span id="photo-hint">📷 Tap to take a photo of the label<br><small>Hold the bottle flat-on, in good light, without glare</small></span>
       </label>
       <input type="file" id="photo" accept="image/*" capture="environment" hidden>
 
-      <button id="scan-btn" class="primary" disabled>Scan label</button>
+      <div class="row">
+        <button id="rotate-btn" class="secondary" disabled>↻ Rotate</button>
+        <button id="scan-btn" class="primary" disabled>Read label</button>
+      </div>
+      <progress id="progress" hidden></progress>
       <p id="status" class="status" role="status"></p>
+      <button id="manual-btn" class="link">No camera? Type the directions instead</button>
     </section>
 
-    <section class="card" id="result-card" hidden>
-      <div id="low-confidence" class="banner warn" hidden>
-        Some parts of the label were hard to read. Double-check everything below against the bottle, or retake the photo with less glare.
+    <!-- Step 2: user confirms what was read -->
+    <section class="card" id="confirm-card" hidden>
+      <h2>Check the details</h2>
+      <p class="muted">Compare with the bottle and fix anything that's wrong.</p>
+      <div id="issues" class="banner warn" hidden></div>
+
+      <label class="field">
+        <span>Directions on the label</span>
+        <textarea id="directions" rows="3" placeholder="e.g. TAKE 1 TABLET BY MOUTH TWICE DAILY WITH FOOD"></textarea>
+      </label>
+      <button id="reparse-btn" class="link">↺ Update fields from directions</button>
+
+      <div class="grid">
+        <label class="field">
+          <span>Medication</span>
+          <input id="f-med" autocomplete="off">
+        </label>
+        <label class="field">
+          <span>Strength</span>
+          <input id="f-strength" placeholder="e.g. 500 mg" autocomplete="off">
+        </label>
+        <label class="field">
+          <span>Amount per dose</span>
+          <input id="f-qty" type="number" min="0" step="0.5" inputmode="decimal">
+        </label>
+        <label class="field">
+          <span>Form</span>
+          <select id="f-unit"></select>
+        </label>
+        <label class="field">
+          <span>Taken</span>
+          <select id="f-route"></select>
+        </label>
+        <label class="field">
+          <span>How often</span>
+          <select id="f-schedule"></select>
+        </label>
+        <label class="field">
+          <span>Food</span>
+          <select id="f-food"></select>
+        </label>
+        <label class="field">
+          <span>Days (0 = ongoing)</span>
+          <input id="f-days" type="number" min="0" max="365" inputmode="numeric">
+        </label>
+      </div>
+      <label class="check"><input type="checkbox" id="f-prn"> Only when needed</label>
+
+      <div class="field">
+        <span>Warnings</span>
+        <div id="f-warnings" class="checks"></div>
       </div>
 
-      <h2 id="med-name"></h2>
-      <p id="med-strength" class="muted"></p>
-
-      <div id="translated" class="translated">
-        <p id="t-summary" class="summary"></p>
-        <h3>💊</h3>
-        <p id="t-how"></p>
-        <h3>🕒</h3>
-        <p id="t-when"></p>
-        <div id="t-warnings-wrap">
-          <h3>⚠️</h3>
-          <ul id="t-warnings" class="warnings"></ul>
-        </div>
-        <p id="t-disclaimer" class="disclaimer"></p>
-      </div>
-      <button id="speak-btn" class="secondary">🔊 Read aloud</button>
-
-      <details>
-        <summary>Original label text</summary>
-        <p id="orig-directions" class="verbatim"></p>
-        <dl id="orig-details"></dl>
+      <details id="fulltext-wrap">
+        <summary>All text read from the photo</summary>
+        <pre id="fulltext"></pre>
       </details>
     </section>
 
+    <!-- Step 3: translated instructions -->
+    <section class="card" id="result-card" hidden>
+      <div id="translated">
+        <h2 id="t-med"></h2>
+        <dl class="facts">
+          <dt id="t-dose-label"></dt><dd id="t-dose"></dd>
+          <dt id="t-how-label"></dt><dd id="t-how"></dd>
+          <dt id="t-when-label"></dt><dd id="t-when"></dd>
+          <dt id="t-days-label"></dt><dd id="t-days"></dd>
+        </dl>
+        <div id="t-warnings-wrap">
+          <h3 id="t-warnings-label"></h3>
+          <ul id="t-warnings" class="warnings"></ul>
+        </div>
+        <p id="t-unknown" class="banner warn" hidden></p>
+        <p id="t-disclaimer" class="disclaimer"></p>
+      </div>
+      <button id="speak-btn" class="secondary">🔊 Read aloud</button>
+    </section>
+
+    <!-- Step 4: reminders -->
     <section class="card" id="reminder-card" hidden>
       <h2>Reminders</h2>
-      <p class="muted" id="prn-note" hidden>This medicine is taken only as needed, so no daily reminder is suggested. You can still add times below.</p>
       <label class="field">
         <span>Start date</span>
         <input type="date" id="start-date">
-      </label>
-      <label class="field">
-        <span>Repeat</span>
-        <select id="repeat">
-          <option value="daily">Every day</option>
-          <option value="weekly">Every week</option>
-        </select>
-      </label>
-      <label class="field">
-        <span>For how many days? (0 = ongoing)</span>
-        <input type="number" id="duration" min="0" max="365" value="0">
       </label>
       <div class="field">
         <span>Dose times</span>
@@ -82,9 +128,15 @@
         <button id="add-time" class="link">+ Add a time</button>
       </div>
       <button id="ics-btn" class="primary">📅 Add to my calendar</button>
-      <p class="muted small">Downloads a calendar file that works with Google Calendar, Apple Calendar and Outlook. Each dose has an alert.</p>
+      <p id="ics-status" class="status" role="status"></p>
+      <p class="muted small">Downloads a calendar file for Google Calendar, Apple Calendar or Outlook. Each dose has an alert.</p>
     </section>
   </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+  <script src="i18n.js"></script>
+  <script src="parser.js"></script>
+  <script src="ocr.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
