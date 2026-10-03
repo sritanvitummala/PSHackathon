@@ -338,21 +338,31 @@ function capitalize(s) {
   return s.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase());
 }
 
-// Which DRUG_CLASSES group a medication name belongs to, or null. Accepts
-// whatever is in the Medication field, including typos and extra words.
-function drugClass(name, strength = "") {
-  const words = (name.toLowerCase().match(/[a-z]{4,}/g) || []);
-  for (const [cls, drugs] of Object.entries(DRUG_CLASSES)) {
-    for (const drug of drugs) {
-      const limit = drug.length >= 8 ? 2 : drug.length >= 6 ? 1 : 0;
-      if (words.some((w) => w === drug || levenshtein(w, drug) <= limit)) {
-        // Low-dose (81 mg) aspirin is taken to prevent clots, not for pain.
-        if (drug === "aspirin" && /\b81\b/.test(strength)) return "antiplatelet";
-        return cls;
-      }
+// The known generic drug a medication name refers to, or null. Accepts whatever
+// is in the Medication field, including typos and extra words ("Metformin ER").
+function findDrug(name) {
+  const words = ((name || "").toLowerCase().match(/[a-z]{4,}/g) || []);
+  const exact = DRUGS.find((drug) => words.includes(drug));
+  if (exact) return exact;
+  // Otherwise the closest near-miss ("prednisone" must not match "prednisolone").
+  let best = null;
+  for (const drug of DRUGS) {
+    const limit = drug.length >= 8 ? 2 : drug.length >= 6 ? 1 : 0;
+    for (const w of words) {
+      const d = levenshtein(w, drug);
+      if (d <= limit && (!best || d < best.dist)) best = { drug, dist: d };
     }
   }
-  return null;
+  return best ? best.drug : null;
+}
+
+// Which DRUG_CLASSES group a medication name belongs to, or null.
+function drugClass(name, strength = "") {
+  const drug = findDrug(name);
+  if (!drug) return null;
+  // Low-dose (81 mg) aspirin is taken to prevent clots, not for pain.
+  if (drug === "aspirin" && /\b81\b/.test(strength)) return "antiplatelet";
+  return Object.keys(DRUG_CLASSES).find((cls) => DRUG_CLASSES[cls].includes(drug));
 }
 
 // Default reminder times for a schedule. "While awake" drops overnight doses.
@@ -377,5 +387,5 @@ function parseIssues(p) {
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { parseLabel, parseDirections, defaultTimes, parseIssues, drugClass, DRUG_CLASSES, SCHEDULE_TIMES, WARNING_PATTERNS };
+  module.exports = { parseLabel, parseDirections, defaultTimes, parseIssues, findDrug, drugClass, DRUG_CLASSES, SCHEDULE_TIMES, WARNING_PATTERNS };
 }

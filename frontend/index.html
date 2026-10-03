@@ -3,6 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#000000">
+  <meta name="color-scheme" content="dark">
   <title>MediBridge</title>
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -127,6 +129,8 @@
       </div>
       <button id="speak-btn" class="secondary">🔊 Read aloud</button>
       <p id="speak-status" class="muted small"></p>
+      <button id="save-btn" class="primary">💾 Save to My medicines</button>
+      <p id="save-status" class="status" role="status"></p>
     </section>
 
     <!-- Step 4: reminders -->
@@ -145,6 +149,20 @@
       <p id="ics-status" class="status" role="status"></p>
       <p class="muted small">Downloads a calendar file for Google Calendar, Apple Calendar or Outlook. Each dose has an alert.</p>
     </section>
+
+    <!-- Saved medicines + interaction check (stored only on this device) -->
+    <section class="card" id="meds-card" hidden>
+      <h2>My medicines</h2>
+      <p class="muted small">Saved only on this device. Nothing is uploaded.</p>
+      <ul id="med-list" class="med-list"></ul>
+
+      <div id="interactions" class="interactions">
+        <h3 id="ix-title"></h3>
+        <div id="ix-list"></div>
+        <p id="ix-unknown" class="muted small"></p>
+        <p id="ix-note" class="muted small"></p>
+      </div>
+    </section>
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
@@ -152,6 +170,7 @@
   <script src="drug-info.js"></script>
   <script src="parser.js"></script>
   <script src="ocr.js"></script>
+  <script src="interactions.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

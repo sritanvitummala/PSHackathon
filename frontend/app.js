@@ -258,6 +258,7 @@ function update() {
   $("t-unknown").textContent = t.unknown;
   $("t-unknown").hidden = !t.unknown;
   $("t-disclaimer").textContent = t.disclaimer;
+  renderMeds();
 }
 
 function setFact(key, label, value) {
@@ -417,6 +418,151 @@ function foldLine(line) {
   parts.push(current);
   return parts.join("\r\n ");
 }
+
+// ---------- My medicines (saved on this device) ----------
+
+const STORAGE_KEY = "medibridge.meds";
+let pendingRemove = null; // id waiting for a second tap to confirm removal
+
+// Storage can be blocked (private browsing, strict settings), so never let it throw.
+function loadMeds() {
+  try {
+    const meds = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    return Array.isArray(meds) ? meds : [];
+  } catch {
+    return [];
+  }
+}
+
+function storeMeds(meds) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(meds));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const sameMed = (a, b) => a.medication.toLowerCase() === b.medication.toLowerCase()
+  && a.strength.toLowerCase() === b.strength.toLowerCase();
+
+$("save-btn").addEventListener("click", () => {
+  const d = readForm();
+  if (!d.medication) {
+    $("save-status").textContent = "Add the medication name first.";
+    return;
+  }
+  const meds = loadMeds();
+  const i = meds.findIndex((m) => sameMed(m, d));
+  const entry = { ...d, id: i >= 0 ? meds[i].id : uniqueId(), savedAt: new Date().toISOString() };
+  if (i >= 0) meds[i] = entry;
+  else meds.push(entry);
+  if (!storeMeds(meds)) {
+    $("save-status").textContent = "Could not save: this browser is blocking storage (private mode?).";
+    return;
+  }
+  $("save-status").textContent = i >= 0 ? `Updated ${d.medication} in My medicines.` : `Saved ${d.medication} to My medicines.`;
+  renderMeds();
+});
+
+function renderMeds() {
+  const meds = loadMeds();
+  $("meds-card").hidden = meds.length === 0;
+  if (meds.length === 0) return;
+
+  // The medicine on screen is checked too, before it's saved.
+  const d = readForm();
+  const current = !$("confirm-card").hidden && d.medication && !meds.some((m) => sameMed(m, d)) ? d : null;
+
+  const rows = meds.map((m) => {
+    const li = document.createElement("li");
+    const info = document.createElement("div");
+    info.append(
+      el("strong", [m.medication, m.strength].filter(Boolean).join(" ")),
+      el("small", `${EN.schedule[m.schedule] || ""} · saved ${new Date(m.savedAt).toLocaleDateString()}`),
+    );
+    const open = el("button", "Open");
+    open.className = "secondary";
+    open.addEventListener("click", () => openSaved(m));
+    const remove = el("button", pendingRemove === m.id ? "Tap again to remove" : "Remove");
+    remove.className = "secondary danger";
+    remove.addEventListener("click", () => removeSaved(m.id));
+    li.append(info, open, remove);
+    return li;
+  });
+  if (current) {
+    const li = document.createElement("li");
+    li.className = "current";
+    li.append(el("strong", [current.medication, current.strength].filter(Boolean).join(" ")),
+      el("small", "On screen now, not saved yet"));
+    rows.push(li);
+  }
+  $("med-list").replaceChildren(...rows);
+  renderInteractions([...meds, ...(current ? [current] : [])]);
+}
+
+function renderInteractions(meds) {
+  const L = currentLang();
+  const key = $("language").value;
+  const T = INTERACTION_TEXT[key] || INTERACTION_TEXT.en;
+  const result = checkInteractions(meds.map((m) => ({ name: m.medication, strength: m.strength })));
+
+  $("interactions").dir = L.rtl ? "rtl" : "ltr";
+  $("interactions").lang = L.tts;
+  $("ix-title").textContent = `🔎 ${T.title}`;
+
+  let items;
+  if (result.checked < 2) {
+    items = [el("p", "Save another medicine to check how they work together.")];
+    items[0].className = "muted";
+  } else if (result.alerts.length === 0) {
+    items = [el("p", `✅ ${T.none}`)];
+  } else {
+    items = result.alerts.map((a) => {
+      const box = document.createElement("div");
+      box.className = `alert ${a.severity}`;
+      const badge = el("span", a.severity === "high" ? `⛔ ${T.high}` : `⚠️ ${T.moderate}`);
+      badge.className = "badge";
+      box.append(badge, el("p", interactionText(key, a)));
+      // English underneath, to show a pharmacist.
+      if (key !== "en") {
+        const en = el("p", interactionText("en", a));
+        en.className = "english";
+        en.lang = "en";
+        en.dir = "ltr";
+        box.append(en);
+      }
+      return box;
+    });
+  }
+  $("ix-list").replaceChildren(...items);
+  $("ix-unknown").textContent = result.unknown.length ? `${T.notChecked} ${result.unknown.join(", ")}` : "";
+  $("ix-note").textContent = T.note;
+}
+
+function openSaved(m) {
+  fillForm({
+    ...m, fullText: "", whileAwake: false, multiStep: false, ocrConfidence: 100, medicationKnown: true,
+  });
+  // Restore the saved reminder times instead of the schedule defaults.
+  $("times").replaceChildren();
+  for (const time of m.times || []) addTimeRow(time);
+  $("save-status").textContent = "";
+  update();
+}
+
+function removeSaved(id) {
+  if (pendingRemove !== id) {
+    pendingRemove = id;
+    renderMeds();
+    return;
+  }
+  pendingRemove = null;
+  storeMeds(loadMeds().filter((m) => m.id !== id));
+  renderMeds();
+}
+
+renderMeds();
 
 // ---------- Helpers ----------
 

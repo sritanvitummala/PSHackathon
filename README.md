@@ -5,7 +5,8 @@ Take a photo of a prescription bottle and MediBridge will:
 1. **Read the label on your phone.** OCR (text recognition) runs in the browser, so the photo never leaves the device.
 2. **Let you check it.** Every detail it found can be edited before it's used.
 3. **Explain it in your language.** 12 languages, with read-aloud. Arabic displays right-to-left.
-4. **Create reminders.** It downloads a calendar file that works with Google Calendar, Apple Calendar or Outlook, with a repeating event and alert for each dose.
+4. **Save your medicines and check for interactions.** Saved prescriptions stay on the phone. The app flags well-known risky combinations (for example an opioid with a sedative, or a blood thinner with ibuprofen) and duplicate medicines, in your language with English underneath for a pharmacist.
+5. **Create reminders.** It downloads a calendar file that works with Google Calendar, Apple Calendar or Outlook, with a repeating event and alert for each dose.
 
 It's free to run: no API keys, no server costs and no accounts.
 
@@ -20,6 +21,8 @@ photo → Tesseract.js OCR → pattern parser → user confirms → fixed-phrase
 | `frontend/ocr.js` | Image cleanup (grayscale, contrast) and Tesseract.js OCR in the browser |
 | `frontend/parser.js` | Turns label text into dose, schedule, duration, food and warnings. It fuzzy-matches ~130 common drug names to survive OCR typos |
 | `frontend/i18n.js` | Pre-written translations of standard label phrases (12 languages) |
+| `frontend/drug-info.js` | "What it's for" text for 39 drug types (12 languages) |
+| `frontend/interactions.js` | Rules for common drug interactions and duplicate medicines, with alert text (12 languages) |
 | `frontend/app.js` | The UI steps, read-aloud and calendar file generation |
 
 **Why fixed-phrase translations instead of AI translation?** US pharmacy directions use a small set of standard phrases ("TAKE 1 TABLET BY MOUTH TWICE DAILY", "MAY CAUSE DROWSINESS"). Translating those phrases once, and filling in only the numbers, means the app can never invent an instruction. Anything it doesn't recognize is flagged with "ask your pharmacist" instead of being guessed.
