@@ -256,15 +256,61 @@ function setFact(key, label, value) {
   $(`t-${key}-label`).hidden = $(`t-${key}`).hidden = !value;
 }
 
-$("speak-btn").addEventListener("click", () => {
+// ---------- Read aloud ----------
+
+// Browsers fall back to their default (usually English) voice when only `lang`
+// is set, so pick a voice for the language explicitly.
+function findVoice(L) {
+  const voices = speechSynthesis.getVoices();
+  const norm = (code) => code.toLowerCase().replace("_", "-");
+  const exact = norm(L.tts);
+  const bases = [exact.split("-")[0], ...(L.ttsAlt || [])];
+  const matches = voices.filter((v) => norm(v.lang) === exact)
+    .concat(voices.filter((v) => bases.includes(norm(v.lang).split("-")[0])));
+  // Prefer the higher-quality neural/online voices when there are several.
+  return matches.find((v) => /natural|neural|online|google/i.test(v.name)) || matches[0] || null;
+}
+
+// Voices load asynchronously; wait briefly for them on first use.
+function voicesReady() {
+  if (speechSynthesis.getVoices().length) return Promise.resolve();
+  return new Promise((resolve) => {
+    speechSynthesis.addEventListener("voiceschanged", resolve, { once: true });
+    setTimeout(resolve, 1500);
+  });
+}
+
+async function updateVoiceStatus() {
+  if (!("speechSynthesis" in window)) {
+    $("speak-btn").hidden = true;
+    return;
+  }
+  await voicesReady();
   const L = currentLang();
+  const voice = findVoice(L);
+  $("speak-btn").disabled = !voice;
+  $("speak-status").textContent = voice ? "" :
+    `This device has no ${L.name} voice. Try Microsoft Edge, or add ${L.name} under text-to-speech in your phone's settings.`;
+}
+
+$("speak-btn").addEventListener("click", async () => {
+  await voicesReady();
+  const L = currentLang();
+  const voice = findVoice(L);
+  if (!voice) return updateVoiceStatus();
   const t = translate(readForm(), L);
   const text = [t.title, t.dose, t.how, t.when, ...t.warnings, t.unknown, t.disclaimer].filter(Boolean).join(". ");
   speechSynthesis.cancel();
   const utter = new SpeechSynthesisUtterance(text);
-  utter.lang = L.tts;
+  utter.voice = voice;
+  utter.lang = voice.lang;
+  utter.rate = 0.9; // a little slower is easier to follow
   speechSynthesis.speak(utter);
 });
+
+$("language").addEventListener("change", updateVoiceStatus);
+if ("speechSynthesis" in window) speechSynthesis.addEventListener("voiceschanged", updateVoiceStatus);
+updateVoiceStatus();
 
 // ---------- Step 4: reminders ----------
 
@@ -314,11 +360,11 @@ function buildIcs(d, t, startDate) {
   let rrule = weekly ? "FREQ=WEEKLY" : "FREQ=DAILY";
   if (d.durationDays > 0) rrule += `;COUNT=${weekly ? Math.ceil(d.durationDays / 7) : d.durationDays}`;
 
-  const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//PillPal//EN", "CALSCALE:GREGORIAN"];
+  const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//MediBridge//EN", "CALSCALE:GREGORIAN"];
   for (const time of d.times) {
     lines.push(
       "BEGIN:VEVENT",
-      `UID:${crypto.randomUUID()}@pillpal`,
+      `UID:${crypto.randomUUID()}@medibridge`,
       `DTSTAMP:${stamp}`,
       `DTSTART:${date}T${time.replace(":", "")}00`,
       "DURATION:PT15M",

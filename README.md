@@ -1,6 +1,6 @@
-# PillPal — PSHackathon
+# MediBridge — PSHackathon
 
-Take a photo of a prescription bottle and PillPal will:
+Take a photo of a prescription bottle and MediBridge will:
 
 1. **Read the label on your phone.** OCR (text recognition) runs in the browser, so the photo never leaves the device.
 2. **Let you check it.** Every detail it found can be edited before it's used.

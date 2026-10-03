@@ -456,7 +456,7 @@ const I18N = {
   },
 
   tl: {
-    name: "Tagalog", tts: "fil-PH",
+    name: "Tagalog", tts: "fil-PH", ttsAlt: ["tl"], // devices label Filipino voices either way
     label: {
       dose: "Dosis", how: "Paano", when: "Kailan", duration: "Ilang araw", warnings: "Mga babala",
       disclaimer: "Laging kumpirmahin sa iyong parmasyutiko o doktor.",
