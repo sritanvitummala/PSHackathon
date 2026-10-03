@@ -171,3 +171,15 @@ pre { white-space: pre-wrap; background: var(--bg); padding: 10px; border-radius
   pointer-events: none;
 }
 .crop-wrap { overflow: hidden; border-radius: 10px; }
+
+.purpose {
+  background: #e8f4f1;
+  border-left: 4px solid var(--accent);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin: 10px 0 4px;
+}
+.purpose-label { font-size: 0.85rem; color: var(--muted); }
+.purpose p { margin: 4px 0 0; }
+.purpose .small { color: var(--muted); }
+[dir="rtl"] .purpose { border-left: none; border-right: 4px solid var(--accent); }

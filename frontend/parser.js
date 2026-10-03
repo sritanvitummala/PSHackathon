@@ -2,30 +2,54 @@
 // US pharmacy directions are highly formulaic ("TAKE 1 TABLET BY MOUTH TWICE DAILY"),
 // so pattern rules cover most labels. Anything unrecognized is flagged, never guessed.
 
-// Common generic drug names, used to pick the medication out of noisy OCR text.
-const DRUGS = [
-  "acetaminophen", "acyclovir", "albuterol", "allopurinol", "alprazolam", "amlodipine",
-  "amoxicillin", "amphetamine", "apixaban", "aripiprazole", "aspirin", "atenolol", "atorvastatin",
-  "azithromycin", "baclofen", "benzonatate", "bupropion", "buspirone", "carvedilol", "cefdinir",
-  "cefuroxime", "cephalexin", "cetirizine", "ciprofloxacin", "citalopram", "clindamycin",
-  "clonazepam", "clonidine", "clopidogrel", "colchicine", "cyclobenzaprine", "diazepam",
-  "dicyclomine", "diltiazem", "donepezil", "doxycycline", "duloxetine", "ergocalciferol",
-  "escitalopram", "esomeprazole", "estradiol", "famotidine", "finasteride", "fluconazole",
-  "fluoxetine", "fluticasone", "furosemide", "gabapentin", "glimepiride", "glipizide",
-  "hydralazine", "hydrochlorothiazide", "hydrocodone", "hydrocortisone", "hydroxyzine",
-  "ibuprofen", "insulin", "ketoconazole", "lamotrigine", "latanoprost", "levetiracetam",
-  "levofloxacin", "levothyroxine", "lisinopril", "lithium", "loratadine", "lorazepam", "losartan",
-  "meclizine", "medroxyprogesterone", "meloxicam", "memantine", "metformin", "methocarbamol", "methotrexate",
-  "methylphenidate", "methylprednisolone", "metoprolol", "metronidazole", "mirtazapine",
-  "montelukast", "mupirocin", "naproxen", "nitrofurantoin", "norethindrone", "nystatin",
-  "ofloxacin", "olanzapine", "omeprazole", "ondansetron", "oseltamivir", "oxycodone",
-  "pantoprazole", "paroxetine", "penicillin", "potassium", "pravastatin", "prednisolone",
-  "prednisone", "pregabalin", "promethazine", "propranolol", "quetiapine", "risperidone",
-  "rivaroxaban", "ropinirole", "rosuvastatin", "sertraline", "sildenafil", "simvastatin",
-  "sitagliptin", "spironolactone", "sulfamethoxazole", "sumatriptan", "tamsulosin", "timolol",
-  "tizanidine", "tobramycin", "topiramate", "tramadol", "trazodone", "triamcinolone",
-  "trimethoprim", "valacyclovir", "valsartan", "venlafaxine", "warfarin", "zolpidem",
-];
+// Common generic drugs grouped by what they treat. Used to pick the medication
+// out of noisy OCR text and to explain what it's for (text in drug-info.js).
+const DRUG_CLASSES = {
+  antibiotic: ["amoxicillin", "azithromycin", "cefdinir", "cefuroxime", "cephalexin", "ciprofloxacin",
+    "clindamycin", "doxycycline", "levofloxacin", "metronidazole", "mupirocin", "nitrofurantoin",
+    "ofloxacin", "penicillin", "sulfamethoxazole", "tobramycin", "trimethoprim"],
+  antiviral: ["acyclovir", "oseltamivir", "valacyclovir"],
+  antifungal: ["fluconazole", "ketoconazole", "nystatin"],
+  blood_pressure: ["amlodipine", "clonidine", "diltiazem", "hydralazine", "hydrochlorothiazide",
+    "lisinopril", "losartan", "valsartan"],
+  heart_rate: ["atenolol", "carvedilol", "metoprolol", "propranolol"],
+  water_pill: ["furosemide", "spironolactone"],
+  cholesterol: ["atorvastatin", "pravastatin", "rosuvastatin", "simvastatin"],
+  diabetes: ["glimepiride", "glipizide", "insulin", "metformin", "sitagliptin"],
+  thyroid: ["levothyroxine"],
+  stomach_acid: ["esomeprazole", "famotidine", "omeprazole", "pantoprazole"],
+  nausea: ["meclizine", "ondansetron", "promethazine"],
+  antidepressant: ["bupropion", "citalopram", "duloxetine", "escitalopram", "fluoxetine",
+    "mirtazapine", "paroxetine", "sertraline", "trazodone", "venlafaxine"],
+  anxiety: ["buspirone"],
+  sedative: ["alprazolam", "clonazepam", "diazepam", "lorazepam"],
+  sleep: ["zolpidem"],
+  nerve: ["gabapentin", "lamotrigine", "levetiracetam", "pregabalin", "topiramate"],
+  muscle: ["baclofen", "cyclobenzaprine", "methocarbamol", "tizanidine"],
+  pain_inflammation: ["aspirin", "ibuprofen", "meloxicam", "naproxen"],
+  pain_fever: ["acetaminophen"],
+  opioid: ["hydrocodone", "oxycodone", "tramadol"],
+  steroid: ["hydrocortisone", "methylprednisolone", "prednisolone", "prednisone", "triamcinolone"],
+  breathing: ["albuterol", "fluticasone", "montelukast"],
+  allergy: ["cetirizine", "hydroxyzine", "loratadine"],
+  blood_thinner: ["apixaban", "rivaroxaban", "warfarin"],
+  antiplatelet: ["clopidogrel"],
+  gout: ["allopurinol", "colchicine"],
+  prostate: ["finasteride", "tamsulosin"],
+  blood_flow: ["sildenafil"],
+  hormone: ["estradiol", "medroxyprogesterone", "norethindrone"],
+  mood: ["aripiprazole", "lithium", "olanzapine", "quetiapine", "risperidone"],
+  adhd: ["amphetamine", "methylphenidate"],
+  memory: ["donepezil", "memantine"],
+  parkinson: ["ropinirole"],
+  migraine: ["sumatriptan"],
+  supplement: ["ergocalciferol", "potassium"],
+  cough: ["benzonatate"],
+  gut_cramps: ["dicyclomine"],
+  glaucoma: ["latanoprost", "timolol"],
+  immune: ["methotrexate"],
+};
+const DRUGS = Object.values(DRUG_CLASSES).flat();
 
 const UNITS = [
   ["tablet", "tab(?:let)?s?"],
@@ -314,6 +338,23 @@ function capitalize(s) {
   return s.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase());
 }
 
+// Which DRUG_CLASSES group a medication name belongs to, or null. Accepts
+// whatever is in the Medication field, including typos and extra words.
+function drugClass(name, strength = "") {
+  const words = (name.toLowerCase().match(/[a-z]{4,}/g) || []);
+  for (const [cls, drugs] of Object.entries(DRUG_CLASSES)) {
+    for (const drug of drugs) {
+      const limit = drug.length >= 8 ? 2 : drug.length >= 6 ? 1 : 0;
+      if (words.some((w) => w === drug || levenshtein(w, drug) <= limit)) {
+        // Low-dose (81 mg) aspirin is taken to prevent clots, not for pain.
+        if (drug === "aspirin" && /\b81\b/.test(strength)) return "antiplatelet";
+        return cls;
+      }
+    }
+  }
+  return null;
+}
+
 // Default reminder times for a schedule. "While awake" drops overnight doses.
 // As-needed medicines get no scheduled reminders unless the user adds them.
 function defaultTimes(schedule, whileAwake = false, asNeeded = false) {
@@ -336,5 +377,5 @@ function parseIssues(p) {
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { parseLabel, parseDirections, defaultTimes, parseIssues, SCHEDULE_TIMES, WARNING_PATTERNS };
+  module.exports = { parseLabel, parseDirections, defaultTimes, parseIssues, drugClass, DRUG_CLASSES, SCHEDULE_TIMES, WARNING_PATTERNS };
 }

@@ -219,8 +219,11 @@ function translate(d, L) {
   let when = L.schedule[d.schedule];
   if (d.asNeeded && d.schedule !== "as_needed") when += ` — ${L.schedule.as_needed}`;
   if (d.times.length) when += ` (${d.times.join(", ")})`;
+  const info = DRUG_INFO[Object.keys(I18N).find((k) => I18N[k] === L)] || DRUG_INFO.en;
+  const cls = drugClass(d.medication, d.strength);
   return {
     title: [d.medication, d.strength].filter(Boolean).join(" ") || "—",
+    purpose: cls ? { label: info.label, name: info.classes[cls][0], desc: info.classes[cls][1], note: info.note } : null,
     dose: d.doseQty ? `${d.doseQty} × ${L.unit[d.doseUnit] || ""}`.trim() : "",
     how: [L.route[d.route], L.food[d.food]].filter(Boolean).join(" · "),
     when,
@@ -238,6 +241,13 @@ function update() {
   $("translated").dir = L.rtl ? "rtl" : "ltr";
   $("translated").lang = L.tts;
   $("t-med").textContent = t.title;
+  $("t-purpose").hidden = !t.purpose;
+  if (t.purpose) {
+    $("t-purpose-label").textContent = t.purpose.label;
+    $("t-purpose-name").textContent = t.purpose.name;
+    $("t-purpose-desc").textContent = t.purpose.desc;
+    $("t-purpose-note").textContent = t.purpose.note;
+  }
   setFact("dose", L.label.dose, t.dose);
   setFact("how", L.label.how, t.how);
   setFact("when", L.label.when, t.when);
@@ -299,7 +309,7 @@ $("speak-btn").addEventListener("click", async () => {
   const voice = findVoice(L);
   if (!voice) return updateVoiceStatus();
   const t = translate(readForm(), L);
-  const text = [t.title, t.dose, t.how, t.when, ...t.warnings, t.unknown, t.disclaimer].filter(Boolean).join(". ");
+  const text = [t.title, t.purpose && `${t.purpose.name}. ${t.purpose.desc}`, t.dose, t.how, t.when, ...t.warnings, t.unknown, t.disclaimer].filter(Boolean).join(". ");
   speechSynthesis.cancel();
   const utter = new SpeechSynthesisUtterance(text);
   utter.voice = voice;
@@ -353,8 +363,8 @@ function buildIcs(d, t, startDate) {
   const stamp = new Date().toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
   const date = startDate.replace(/-/g, "");
   const title = `💊 ${[t.title, t.dose].filter((s) => s && s !== "—").join(" — ")}`;
-  const description = [t.dose, t.how, t.when, ...t.warnings, "", `Label: ${d.directions}`, t.disclaimer]
-    .filter((s) => s !== undefined).join("\n");
+  const description = [t.purpose && `${t.purpose.name}: ${t.purpose.desc}`, t.dose, t.how, t.when, ...t.warnings, "", `Label: ${d.directions}`, t.disclaimer]
+    .filter((s) => s != null).join("\n");
 
   const weekly = d.schedule === "weekly";
   let rrule = weekly ? "FREQ=WEEKLY" : "FREQ=DAILY";

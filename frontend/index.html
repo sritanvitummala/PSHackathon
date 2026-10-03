@@ -106,6 +106,12 @@
     <section class="card" id="result-card" hidden>
       <div id="translated">
         <h2 id="t-med"></h2>
+        <div id="t-purpose" class="purpose" hidden>
+          <div class="purpose-label">ℹ️ <span id="t-purpose-label"></span></div>
+          <strong id="t-purpose-name"></strong>
+          <p id="t-purpose-desc"></p>
+          <p id="t-purpose-note" class="small"></p>
+        </div>
         <dl class="facts">
           <dt id="t-dose-label"></dt><dd id="t-dose"></dd>
           <dt id="t-how-label"></dt><dd id="t-how"></dd>
@@ -143,6 +149,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
   <script src="i18n.js"></script>
+  <script src="drug-info.js"></script>
   <script src="parser.js"></script>
   <script src="ocr.js"></script>
   <script src="app.js"></script>
